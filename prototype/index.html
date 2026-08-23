@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CentralByte — protótipo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!--
+    Design prototype for centralbyte (flow + interaction).
+    Not the Tauri/React app. No real CLI, PTY, or ControlPlane.
+  -->
+  <div class="app" id="app" data-theme="dark">
+    <header class="titlebar">
+      <div class="traffic">
+        <span></span><span></span><span></span>
+      </div>
+      <button type="button" class="workspace-chip" data-act="rail" data-rail="files" title="Workspace">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h6l2 2h8v9H4V8Z"/><path d="M4 8V6h5l2 2"/></svg>
+        <span>
+          <strong id="title-workspace">centralbyte</strong>
+          <span class="muted" id="title-cwd">workspace vazio</span>
+        </span>
+      </button>
+      <div class="titlebar-spacer"></div>
+      <button type="button" class="ghost" data-act="toggle-theme" title="Tema claro/escuro" id="theme-btn">
+        Tema
+      </button>
+    </header>
+
+    <div class="workspace">
+      <nav class="activity" id="activity" aria-label="Barra de atividades"></nav>
+
+      <aside class="sidebar" id="sidebar"></aside>
+
+      <div class="main">
+        <div class="session-tabs" id="session-tabs"></div>
+        <div class="sessions" id="sessions"></div>
+        <div class="bottom-panel" id="bottom-panel" hidden></div>
+      </div>
+
+      <aside class="tool-pane" id="tool-pane" hidden></aside>
+    </div>
+
+    <footer class="statusbar" id="statusbar"></footer>
+  </div>
+
+  <!-- Overlays stay in body; theme is on html so CSS variables apply. -->
+  <div class="slash" id="slash" hidden></div>
+  <div class="plus-pop" id="plus-menu" hidden></div>
+
+  <div class="modal-root" id="agent-modal" hidden></div>
+  <input type="file" id="folder-pick" hidden webkitdirectory directory />
+
+  <div class="modal-root" id="permission" hidden>
+    <div class="modal-backdrop" data-act="deny-browser"></div>
+    <div class="modal" role="dialog" aria-labelledby="perm-title">
+      <h3 id="perm-title">Permissão do browser</h3>
+      <p id="perm-body">O agente quer abrir o browser.</p>
+      <div class="modal-actions">
+        <button type="button" class="ghost" data-act="deny-browser">Negar</button>
+        <button type="button" class="primary" data-act="allow-browser">Permitir</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
