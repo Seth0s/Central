@@ -52,6 +52,7 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libsoup-3.0-dev \
+            libvte-2.91-dev \
             build-essential \
             pkg-config
       - uses: dtolnay/rust-toolchain@stable
