@@ -9,6 +9,7 @@ export type LiveAgentView = {
   catalogId?: string;
   groupId: string;
   name: string;
+  provider?: string;
   status: "running" | "exit";
   nested: NestedAgent[];
   taskLabel: string;
@@ -27,14 +28,7 @@ const PULSE_LABEL: Record<AgentPulse, string> = {
 
 function AgentOrb({ pulse }: { pulse: AgentPulse }) {
   return (
-    <span className={`agent-orb ${pulse}`} title={PULSE_LABEL[pulse]} aria-label={PULSE_LABEL[pulse]}>
-      <span className="agent-orb-core" />
-      <span className="agent-orb-ring" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-      </span>
-    </span>
+    <span className={`agent-orb ${pulse}`} title={PULSE_LABEL[pulse]} aria-label={PULSE_LABEL[pulse]} />
   );
 }
 
@@ -180,8 +174,28 @@ export default function SessionTree({
         <p className="muted nested">{showArchived ? "Arquivo vazio." : "Nada corresponde."}</p>
       )}
       {visible.map((group) => {
-        const agents = group.agents ?? [];
         const groupLive = live.filter((l) => l.groupId === group.id);
+        const agents: SavedAgent[] = [
+          ...(group.agents ?? []),
+          ...groupLive
+            .filter(
+              (candidate) =>
+                !(group.agents ?? []).some(
+                  (agent) =>
+                    agent.id === candidate.id ||
+                    agent.id === candidate.catalogId ||
+                    candidate.id === agent.id ||
+                    candidate.catalogId === agent.id,
+                ),
+            )
+            .map((candidate) => ({
+              id: candidate.catalogId || candidate.id,
+              provider: candidate.provider || "fixture",
+              name: candidate.name,
+              mode: "cli",
+              resume_id: candidate.resumeId ?? null,
+            })),
+        ];
         const selectedHere = agents.some((a) => {
           const lv = liveOf(group.id, a);
           return a.id === activeId || lv?.id === activeId;
@@ -232,6 +246,11 @@ export default function SessionTree({
             </div>
             {groupOpen && (
               <div className="tree-children">
+                {agents.length === 0 && (
+                  <button type="button" className="tree-empty-agent" onClick={() => onAddAgent(group)}>
+                    Sem agentes — Adicionar
+                  </button>
+                )}
                 {agents.map((agent) => {
                   const lv = liveOf(group.id, agent);
                   const selected = activeId === agent.id || activeId === lv?.id;

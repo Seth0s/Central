@@ -14,6 +14,7 @@ import { fileCrumbs } from "../lib/paths";
 import { FILES_EXPLORER_MAX, FILES_EXPLORER_MIN } from "../lib/ui-metrics";
 import type { Theme } from "../lib/ui-model";
 import type { FilesTool } from "../lib/tool-model";
+import Skeleton from "../ui/Skeleton";
 
 export default function FilesToolBody({
   tab,
@@ -46,6 +47,14 @@ export default function FilesToolBody({
     return (
       <div className="tool-body files-work">
         <p className="muted tool-empty">Abre uma pasta.</p>
+      </div>
+    );
+  }
+
+  if (tab.loading) {
+    return (
+      <div className="tool-body files-work">
+        <Skeleton.Pane label="A carregar ficheiros…" />
       </div>
     );
   }

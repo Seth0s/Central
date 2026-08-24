@@ -29,9 +29,25 @@ export type FilesTool = {
   entries: DirEntry[];
   kids: Record<string, DirEntry[]>;
   open: string[];
+  loading?: boolean;
 };
-export type CanvasTool = { id: string; kind: "canvas"; ownerAgentId: string | null; ownerName: string; title: string; md: string };
-export type TerminalTool = { id: string; kind: "terminal"; ownerAgentId: string | null; ownerName: string; shellId: string | null };
+export type CanvasTool = {
+  id: string;
+  kind: "canvas";
+  ownerAgentId: string | null;
+  ownerName: string;
+  title: string;
+  md: string;
+  loading?: boolean;
+};
+export type TerminalTool = {
+  id: string;
+  kind: "terminal";
+  ownerAgentId: string | null;
+  ownerName: string;
+  shellId: string | null;
+  stopped?: boolean;
+};
 export type ChangesTool = { id: string; kind: "changes"; ownerAgentId: string | null; ownerName: string; git: GitStatus | null };
 export type BrowserTool = { id: string; kind: "browser"; ownerAgentId: string | null; ownerName: string };
 export type ToolTab = FilesTool | CanvasTool | TerminalTool | ChangesTool | BrowserTool;
@@ -47,8 +63,8 @@ export function newToolId(): string {
 export function makeToolTab(kind: ToolKind, owner: ToolOwner): ToolTab {
   const id = newToolId();
   const meta = { id, ownerAgentId: owner.ownerAgentId, ownerName: owner.ownerName };
-  if (kind === "files") return { ...meta, kind, entries: [], kids: {}, open: [], view: "code", explorer: true };
-  if (kind === "canvas") return { ...meta, kind, title: "", md: "" };
+  if (kind === "files") return { ...meta, kind, entries: [], kids: {}, open: [], view: "code", explorer: true, loading: true };
+  if (kind === "canvas") return { ...meta, kind, title: "", md: "", loading: true };
   if (kind === "terminal") return { ...meta, kind, shellId: null };
   if (kind === "browser") return { ...meta, kind };
   return { ...meta, kind, git: null };

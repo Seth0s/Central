@@ -21,7 +21,20 @@ function readPalette(el: HTMLElement) {
 
 function holeRect(el: HTMLElement) {
   const r = el.getBoundingClientRect();
-  return { x: r.x, y: r.y, w: r.width, h: r.height, ready: r.width >= 8 && r.height >= 8 };
+  const cs = getComputedStyle(el);
+  const pl = parseFloat(cs.paddingLeft) || 0;
+  const pr = parseFloat(cs.paddingRight) || 0;
+  const pt = parseFloat(cs.paddingTop) || 0;
+  const pb = parseFloat(cs.paddingBottom) || 0;
+  const w = Math.max(0, r.width - pl - pr);
+  const h = Math.max(0, r.height - pt - pb);
+  return {
+    x: r.x + pl,
+    y: r.y + pt,
+    w,
+    h,
+    ready: w >= 8 && h >= 8,
+  };
 }
 
 function payloadKey(

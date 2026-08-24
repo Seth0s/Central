@@ -1,24 +1,35 @@
-// Window header: drag region, theme toggle, window controls. No panel toggles
-// live here by design (docs/architecture.md § Chrome).
+// Window header: drag region and window controls. Theme lives in Settings.
+// Drag + double-click maximize are handled in JS (not data-tauri-drag-region)
+// so GTK/Wayland does not start a drag on the second click and snap the window back.
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Moon, Sun } from "lucide-react";
-import { UiIcon } from "../icons";
-import type { Theme } from "../lib/ui-model";
 import WindowControls from "./WindowControls";
 
-export default function TitleBar({ theme, onTheme }: { theme: Theme; onTheme: (t: Theme) => void }) {
+function isChromeControl(target: EventTarget | null): boolean {
+  return target instanceof Element && Boolean(target.closest(".win-controls, button, a, input"));
+}
+
+export default function TitleBar() {
   return (
     <header
       className="titlebar"
-      data-tauri-drag-region
-      onDoubleClick={() => void getCurrentWindow().toggleMaximize()}
+      onPointerDown={(e) => {
+        if (e.button !== 0 || isChromeControl(e.target)) return;
+        const win = getCurrentWindow();
+        if (e.detail >= 2) {
+          e.preventDefault();
+          e.stopPropagation();
+          void win.toggleMaximize();
+          return;
+        }
+        void win.startDragging();
+      }}
     >
-      <div className="titlebar-spacer" data-tauri-drag-region />
-      <button type="button" className="ghost" onClick={() => onTheme(theme === "dark" ? "light" : "dark")}>
-        <UiIcon icon={theme === "dark" ? Sun : Moon} size={14} />
-        Tema
-      </button>
+      <div className="app-title">
+        <img src="/brand/logo-mark.png" alt="" />
+        <span>CentralByte</span>
+      </div>
+      <div className="titlebar-spacer" />
       <WindowControls />
     </header>
   );

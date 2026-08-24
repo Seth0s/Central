@@ -31,12 +31,24 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Lucas Sabino",
+    "copyright": "Copyright 2026 Lucas Sabino",
+    "license": "Apache-2.0",
+    "licenseFile": "../LICENSE",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "rpm": {
+        "compression": {
+          "type": "zstd",
+          "level": 3
+        }
+      }
+    }
   }
 }

@@ -314,6 +314,10 @@ test("chat parsers: json lines, turns, pulse and markdown", () => {
   assert(replaced.length === 2, "replace keeps pane count");
   assert(replaced[0]?.id === "proc-new" && replaced[0]?.catalogId === "cat-1", "replace keeps position");
   assert(replaceLiveAgent([], { id: "n", catalogId: "c" }).length === 1, "replace appends when missing");
+  assert(
+    replaceLiveAgent([{ id: "g1a", catalogId: "ga" }], { id: "g2b", catalogId: "gb" }).length === 2,
+    "spawn in another group does not drop the first pane",
+  );
 
   assert(agentPulse({ status: "running", liveTurn: true }) === "run", "pulse run");
   assert(agentPulse({ status: "running", pendingAsk: true, liveTurn: true }) === "warn", "pulse warn beats run");

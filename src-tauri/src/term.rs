@@ -156,6 +156,31 @@ pub fn set_bounds(
     }
 }
 
+/// Apply a monospace point size to every live VTE host (no-op off Linux).
+pub fn set_font(window: &Window<Wry>, px: u32) -> Result<(), String> {
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    {
+        linux::set_font(window, px)
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
+    {
+        let _ = (window, px);
+        Ok(())
+    }
+}
+
 pub fn feed(session_id: &str, data: &[u8]) {
     #[cfg(any(
         target_os = "linux",
@@ -240,6 +265,7 @@ mod linux {
     thread_local! {
         static TERMS: RefCell<HashMap<String, Slot>> = RefCell::new(HashMap::new());
         static PENDING: RefCell<HashMap<String, Vec<u8>>> = RefCell::new(HashMap::new());
+        static FONT_PX: RefCell<u32> = const { RefCell::new(11) };
     }
 
     struct Slot {
@@ -293,6 +319,35 @@ mod linux {
             })
             .map_err(|e| e.to_string())?;
         rx.recv().map_err(|e| e.to_string())
+    }
+
+    pub fn set_font(window: &Window<Wry>, px: u32) -> Result<(), String> {
+        let size = px.clamp(9, 18);
+        on_main(window, move || {
+            FONT_PX.with(|c| *c.borrow_mut() = size);
+            let font = FontDescription::from_string(&format!("Monospace {size}"));
+            TERMS.with(|m| {
+                for slot in m.borrow().values() {
+                    unsafe {
+                        vte_terminal_set_font(term_ptr(&slot.widget), font.to_glib_none().0);
+                    }
+                    if let Some(last) = &slot.last {
+                        let (_, _, wi, hi, _) =
+                            super::layout_alloc(last.x, last.y, last.w, last.h, last.visible);
+                        if wi >= 8 && hi >= 8 {
+                            let ptr = term_ptr(&slot.widget);
+                            let cw = unsafe { vte_terminal_get_char_width(ptr) }.max(1);
+                            let ch = unsafe { vte_terminal_get_char_height(ptr) }.max(1);
+                            let cols = (wi as c_long / cw).max(1);
+                            let rows = (hi as c_long / ch).max(1);
+                            unsafe {
+                                vte_terminal_set_size(ptr, cols, rows);
+                            }
+                        }
+                    }
+                }
+            });
+        })
     }
 
     pub fn set_bounds(
@@ -407,7 +462,8 @@ mod linux {
         widget.set_vexpand(false);
         widget.set_halign(gtk::Align::Start);
         widget.set_valign(gtk::Align::Start);
-        let font = FontDescription::from_string("Monospace 13");
+        let font_px = FONT_PX.with(|c| *c.borrow());
+        let font = FontDescription::from_string(&format!("Monospace {font_px}"));
         unsafe {
             let ptr = term_ptr(&widget);
             vte_terminal_set_font(ptr, font.to_glib_none().0);

@@ -205,7 +205,14 @@ export const api = {
       bg: opts.bg ?? null,
       fg: opts.fg ?? null,
     }),
+  termSetFont: (px: number) => invoke<void>("term_set_font", { px }),
   termClose: (sessionId: string) => invoke<void>("term_close", { sessionId }),
+  probeVendorResume: (provider: string, cwd: string, notBeforeUnixMs?: number) =>
+    invoke<string | null>("probe_vendor_resume", {
+      provider,
+      cwd,
+      notBeforeUnixMs: notBeforeUnixMs ?? null,
+    }),
   sendSelectionStub: () => invoke<{ ok: boolean; reason: string }>("send_selection_stub"),
   browserEnsure: () => invoke<BrowserCurrent>("browser_ensure"),
   browserNavigate: (url: string) => invoke<BrowserCurrent>("browser_navigate", { url }),

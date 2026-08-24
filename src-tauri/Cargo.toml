@@ -2,7 +2,8 @@
 name = "centralbyte"
 version = "0.1.0"
 description = "Desktop skin over real vendor CLIs (PTY + JSON stream)"
-authors = ["CentralByte"]
+authors = ["Lucas Sabino"]
+license = "Apache-2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

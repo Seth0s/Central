@@ -7,6 +7,7 @@ import CanvasPane from "../CanvasPane";
 import type { DirEntry } from "../lib/commands";
 import type { Theme } from "../lib/ui-model";
 import type { CanvasTool } from "../lib/tool-model";
+import Skeleton from "../ui/Skeleton";
 
 export default function CanvasToolBody({
   tab,
@@ -44,7 +45,8 @@ export default function CanvasToolBody({
           </button>
         )}
       </div>
-      {!tab.md && (
+      {tab.loading && <Skeleton.Pane label="A carregar Markdown…" />}
+      {!tab.loading && !tab.md && (
         <div className="md-picker">
           <p className="muted">
             {locked
@@ -68,7 +70,7 @@ export default function CanvasToolBody({
           )}
         </div>
       )}
-      {tab.md && <CanvasPane title={tab.title} markdown={tab.md} theme={theme} />}
+      {!tab.loading && tab.md && <CanvasPane title={tab.title} markdown={tab.md} theme={theme} />}
     </div>
   );
 }

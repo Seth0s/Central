@@ -1,6 +1,8 @@
 [package]
 name = "centralbyte_core"
 version = "0.1.0"
+authors = ["Lucas Sabino"]
+license = "Apache-2.0"
 edition = "2021"
 
 [dependencies]

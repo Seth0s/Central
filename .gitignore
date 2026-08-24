@@ -25,3 +25,4 @@ crates/core/target
 *.njsproj
 *.sln
 *.sw?
+AGENTS.md

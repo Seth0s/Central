@@ -6,7 +6,8 @@
 // resolves the current owner and cwd at call time, so it always sees fresh state.
 
 import { useEffect, useRef, useState } from "react";
-import { api, type DirEntry, type GitStatus } from "../lib/commands";
+import { listen } from "@tauri-apps/api/event";
+import { api, type DirEntry, type GitStatus, type SessionEvent } from "../lib/commands";
 import { isImageName, isMarkdownName, nextUntitledName } from "../lib/files";
 import { normPath, parentDir } from "../lib/paths";
 import {
@@ -103,6 +104,37 @@ export function useToolShelf({
       ?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }, [activeId, tabs.length, open]);
 
+  useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    void listen<SessionEvent>("session-event", (event) => {
+      const payload = event.payload;
+      if (payload.kind !== "exit") return;
+      setShelves((all) =>
+        Object.fromEntries(
+          Object.entries(all).map(([shelfKey, current]) => [
+            shelfKey,
+            {
+              ...current,
+              tabs: current.tabs.map((tab) =>
+                tab.kind === "terminal" && tab.shellId === payload.session_id
+                  ? { ...tab, shellId: null, stopped: true }
+                  : tab,
+              ),
+            },
+          ]),
+        ),
+      );
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   // ── tab lifecycle ──────────────────────────────────────────────────────────
   function openTool(kind: ToolKind) {
     if (!cwd && kind === "files") {
@@ -171,14 +203,24 @@ export function useToolShelf({
 
   // ── files tool ─────────────────────────────────────────────────────────────
   async function loadFiles(k: string, id: string) {
+    patchShelf(k, (s) => ({
+      ...s,
+      tabs: s.tabs.map((t) => (t.id === id && t.kind === "files" ? { ...t, loading: true } : t)),
+    }));
     try {
       const entries = await api.listWorkspace();
       patchShelf(k, (s) => ({
         ...s,
-        tabs: s.tabs.map((t) => (t.id === id && t.kind === "files" ? { ...t, entries } : t)),
+        tabs: s.tabs.map((t) =>
+          t.id === id && t.kind === "files" ? { ...t, entries, loading: false } : t,
+        ),
       }));
     } catch (e) {
       showToast(String(e));
+      patchShelf(k, (s) => ({
+        ...s,
+        tabs: s.tabs.map((t) => (t.id === id && t.kind === "files" ? { ...t, loading: false } : t)),
+      }));
     }
   }
 
@@ -342,6 +384,21 @@ export function useToolShelf({
     } catch {
       setMdFiles([]);
     }
+    setShelves((all) => {
+      const next: typeof all = {};
+      let changed = false;
+      for (const [k, shelf] of Object.entries(all)) {
+        const tabs = shelf.tabs.map((t) => {
+          if (t.kind === "canvas" && t.loading) {
+            changed = true;
+            return { ...t, loading: false };
+          }
+          return t;
+        });
+        next[k] = { ...shelf, tabs };
+      }
+      return changed ? next : all;
+    });
   }
 
   /** Remember which canvas tab asked, then hand the browser over to App. */
@@ -359,6 +416,14 @@ export function useToolShelf({
 
   async function openCanvasFile(path: string, name: string, tabId?: string) {
     const k = shelfKeyOf();
+    if (tabId) {
+      patchShelf(k, (s) => ({
+        ...s,
+        tabs: s.tabs.map((t) =>
+          t.id === tabId && t.kind === "canvas" ? { ...t, loading: true, title: name } : t,
+        ),
+      }));
+    }
     try {
       let md: string;
       try {
@@ -374,7 +439,9 @@ export function useToolShelf({
         patchShelf(k, (s) => ({
           ...s,
           activeId: tabId,
-          tabs: s.tabs.map((t) => (t.id === tabId && t.kind === "canvas" ? { ...t, title: name, md } : t)),
+          tabs: s.tabs.map((t) =>
+            t.id === tabId && t.kind === "canvas" ? { ...t, title: name, md, loading: false } : t,
+          ),
         }));
       } else {
         const owner = ownerOf();
@@ -385,6 +452,7 @@ export function useToolShelf({
           md,
           ownerAgentId: owner.ownerAgentId,
           ownerName: owner.ownerName,
+          loading: false,
         };
         patchShelf(k, (s) => ({ tabs: [...s.tabs, tab], activeId: tab.id }));
       }
@@ -392,6 +460,14 @@ export function useToolShelf({
       setPlusOpen(false);
     } catch (e) {
       showToast(String(e));
+      if (tabId) {
+        patchShelf(k, (s) => ({
+          ...s,
+          tabs: s.tabs.map((t) =>
+            t.id === tabId && t.kind === "canvas" ? { ...t, loading: false } : t,
+          ),
+        }));
+      }
     }
   }
 
@@ -426,15 +502,30 @@ export function useToolShelf({
 
   // ── terminal tool ──────────────────────────────────────────────────────────
   async function startShellFor(k: string, id: string) {
+    patchShelf(k, (s) => ({
+      ...s,
+      tabs: s.tabs.map((t) => (t.id === id && t.kind === "terminal" ? { ...t, shellId: null, stopped: false } : t)),
+    }));
     try {
       const sh = await api.startShell(focusedSession()?.cwd || cwd || undefined);
       patchShelf(k, (s) => ({
         ...s,
-        tabs: s.tabs.map((t) => (t.id === id && t.kind === "terminal" ? { ...t, shellId: sh.id } : t)),
+        tabs: s.tabs.map((t) =>
+          t.id === id && t.kind === "terminal" ? { ...t, shellId: sh.id, stopped: false } : t,
+        ),
       }));
     } catch (e) {
+      patchShelf(k, (s) => ({
+        ...s,
+        tabs: s.tabs.map((t) => (t.id === id && t.kind === "terminal" ? { ...t, shellId: null, stopped: true } : t)),
+      }));
       showToast(String(e));
     }
+  }
+
+  function restartTerminal(tabId: string) {
+    const entry = Object.entries(shelvesRef.current).find(([, current]) => current.tabs.some((tab) => tab.id === tabId));
+    if (entry) void startShellFor(entry[0], tabId);
   }
 
   return {
@@ -474,6 +565,7 @@ export function useToolShelf({
     takePendingCanvasTab,
     openCanvasFile,
     clearCanvas,
+    restartTerminal,
     refreshGit: (tabId: string) => void loadGit(shelfKeyOf(), tabId),
   };
 }

@@ -133,7 +133,7 @@ export default function AgentModal({
           />
         </label>
         {form.provider === "claude" && (
-          <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <label className="field row">
             <input
               type="checkbox"
               checked={form.continueLast}

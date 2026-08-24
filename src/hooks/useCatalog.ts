@@ -63,12 +63,15 @@ export function useCatalog({
     }
     const catalogId = session.catalogId || replaceAgentId || session.id;
     const task = existing?.title || title || session.name;
+    const existingAgent = existing?.agents.find(
+      (a) => a.id === catalogId || a.id === session.id || a.id === replaceAgentId,
+    );
     const agent = {
       id: catalogId,
       provider: session.provider,
       name: session.name,
       mode: session.view,
-      resume_id: session.resumeId ?? null,
+      resume_id: session.resumeId ?? existingAgent?.resume_id ?? null,
     };
     // Drop rows that describe this same agent under an older id or resume id.
     const agents = existing

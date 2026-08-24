@@ -8,6 +8,7 @@ import {
   type BrowserUiEvent,
 } from "./lib/commands";
 import { UiIcon } from "./icons";
+import Skeleton from "./ui/Skeleton";
 import {
   ChevronLeft,
   ChevronRight,
@@ -62,6 +63,7 @@ export default function BrowserPane({
   const [tab, setTab] = useState<DrawerTab>("console");
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
+  const isBlank = !bar.trim() || bar === "about:blank";
 
   function apply(cur: BrowserCurrent, fromPoll = false) {
     if (!fromPoll || document.activeElement !== urlRef.current) {
@@ -139,9 +141,9 @@ export default function BrowserPane({
   }, [onToast]);
 
   useEffect(() => {
-    void api.browserSetVisible(!occluded).catch(() => undefined);
-    if (!occluded) reportBounds();
-  }, [occluded]);
+    void api.browserSetVisible(!occluded && !isBlank).catch(() => undefined);
+    if (!occluded && !isBlank) reportBounds();
+  }, [occluded, isBlank]);
 
   useEffect(() => {
     const el = holeRef.current;
@@ -428,7 +430,51 @@ export default function BrowserPane({
         </div>
       )}
       <div className="browser-stage">
-        <div className="browser-hole" ref={holeRef} aria-hidden />
+        <div className="browser-hole" ref={holeRef} aria-hidden={!isBlank}>
+          {isBlank && (
+            <div className="browser-start">
+              <div className="browser-start-card">
+                <h3>Navegador</h3>
+                <div className="browser-start-go">
+                  <input
+                    value={bar === "about:blank" ? "" : bar}
+                    placeholder="Digite uma URL ou pesquisa"
+                    aria-label="Abrir URL"
+                    disabled={locked}
+                    onChange={(event) => setBar(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") void go();
+                    }}
+                  />
+                  <button type="button" className="primary" disabled={locked || !bar.trim()} onClick={() => void go()}>
+                    Ir
+                  </button>
+                </div>
+                {(agentUrls.length > 0 || bookmarks.length > 0) && (
+                  <div className="browser-start-links">
+                    {agentUrls.length > 0 && <span className="muted">Recentes do agente</span>}
+                    {agentUrls.map((url) => (
+                      <button key={`agent-${url}`} type="button" disabled={readOnly} onClick={() => void go(url)}>
+                        {url}
+                      </button>
+                    ))}
+                    {bookmarks.length > 0 && <span className="muted">Favoritos</span>}
+                    {bookmarks.map((bookmark) => (
+                      <button key={`bookmark-${bookmark.url}`} type="button" disabled={readOnly} onClick={() => void go(bookmark.url)}>
+                        {bookmark.title || bookmark.url}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          {busy && !isBlank && (
+            <div className="browser-busy-skeleton" role="status" aria-busy="true" aria-label="A navegar…">
+              <Skeleton.Lines n={3} />
+            </div>
+          )}
+        </div>
         {drawer && (
           <div className="browser-drawer">
             <div className="browser-panel-tabs">

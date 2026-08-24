@@ -65,6 +65,8 @@ vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({
     isMaximized: async () => false,
     onResized: async () => () => {},
+    startDragging: vi.fn(),
+    startResizeDragging: vi.fn(),
     minimize: vi.fn(),
     toggleMaximize: vi.fn(),
     close: vi.fn(),
@@ -172,13 +174,14 @@ test("opening a tool from the + menu shows that tool in the right bar", async ()
   expect(called).toContain("gitStatus");
 });
 
-test("the theme toggle flips the root attribute and persists", async () => {
+test("the theme toggle in Settings flips the root attribute and persists", async () => {
   const user = userEvent.setup();
   render(<App />);
   await screen.findByRole("button", { name: "central" });
 
   expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
-  await user.click(screen.getByRole("button", { name: "Tema" }));
+  await user.click(screen.getByRole("button", { name: "Configurações" }));
+  await user.click(screen.getByRole("button", { name: "Claro" }));
   expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   expect(localStorage.getItem("cc-theme")).toBe("light");
 });

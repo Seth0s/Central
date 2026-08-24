@@ -16,6 +16,7 @@ use centralbyte_core::history_store::Store;
 use centralbyte_core::mcp::McpRegistry;
 use centralbyte_core::provider::SessionMode;
 use centralbyte_core::session::SessionInfo;
+use centralbyte_core::vendor_resume;
 use centralbyte_core::workspace::{self, DirEntry};
 use runtime::{Runtime, StartOpts};
 use term::Bounds as TermBounds;
@@ -275,6 +276,23 @@ fn session_interrupt(state: tauri::State<AppState>, session_id: String) -> Resul
 }
 
 #[tauri::command]
+fn probe_vendor_resume(
+    provider: String,
+    cwd: String,
+    not_before_unix_ms: Option<u64>,
+) -> Option<String> {
+    let home = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)?;
+    vendor_resume::probe_vendor_resume(
+        &provider,
+        &home,
+        PathBuf::from(cwd).as_path(),
+        not_before_unix_ms,
+    )
+}
+
+#[tauri::command]
 fn term_backend() -> &'static str {
     term::backend()
 }
@@ -320,6 +338,15 @@ fn term_set_bounds(
         state.runtime.resize(&session_id, cols, rows)?;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn term_set_font(app: tauri::AppHandle, px: u32) -> Result<(), String> {
+    let window = app
+        .get_window("main")
+        .or_else(|| app.get_webview_window("main").map(|w| w.as_ref().window()))
+        .ok_or_else(|| "main window missing".to_string())?;
+    term::set_font(&window, px)
 }
 
 #[tauri::command]
@@ -515,8 +542,10 @@ pub fn run() {
             session_resize,
             session_kill,
             session_interrupt,
+            probe_vendor_resume,
             term_backend,
             term_set_bounds,
+            term_set_font,
             term_close,
             send_selection_stub,
             browser_ensure,

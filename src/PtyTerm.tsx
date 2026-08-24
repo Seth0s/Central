@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 import { api } from "./lib/commands";
+import { readTermFontSize } from "./lib/app-prefs";
 import { snapshotViewport } from "./lib/pty_translate";
 
 /** Resolved once per window; the Rust side owns the flag. */
@@ -140,7 +141,7 @@ const PtyTerm = forwardRef<PtyHandle, Props>(function PtyTerm(
     el.replaceChildren();
     const term = new Terminal({
       cursorBlink: true,
-      fontSize: 13,
+      fontSize: readTermFontSize(),
       scrollback: 2000,
       theme: readTermTheme(el),
     });
@@ -193,6 +194,11 @@ const PtyTerm = forwardRef<PtyHandle, Props>(function PtyTerm(
     const themeRoot = el.closest("[data-theme]") ?? document.documentElement;
     const mo = new MutationObserver(onResize);
     mo.observe(themeRoot, { attributes: true, attributeFilter: ["data-theme"] });
+    const onFont = () => {
+      term.options.fontSize = readTermFontSize();
+      applySize();
+    };
+    window.addEventListener("cc-term-font", onFont);
     applySize();
 
     termRef.current = term;
@@ -204,6 +210,7 @@ const PtyTerm = forwardRef<PtyHandle, Props>(function PtyTerm(
       if (resizeTimer.current) window.cancelAnimationFrame(resizeTimer.current);
       ro.disconnect();
       mo.disconnect();
+      window.removeEventListener("cc-term-font", onFont);
       // Dispose the addon before the terminal: it holds the GL context.
       webgl?.dispose();
       term.dispose();

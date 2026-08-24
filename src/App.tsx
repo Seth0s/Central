@@ -21,12 +21,14 @@ import { api, type ProviderInfo, type SavedAgent, type SavedSession, type TermBa
 import { exportTranscriptMd, lastText, sessionBelongsToAgent, siblingStamp } from "./lib/chat";
 import { newSid, ptyLine } from "./lib/paths";
 import { labelOf, messagesFromTurns, type BrowseMode, type Theme } from "./lib/ui-model";
+import { readTermFontSize, writeTermFontSize } from "./lib/app-prefs";
 import { SIDEBAR_MAX, SIDEBAR_MIN } from "./lib/ui-metrics";
 import { useCatalog } from "./hooks/useCatalog";
 import { useAgentRuntime } from "./hooks/useAgentRuntime";
 import { useToolShelf } from "./hooks/useToolShelf";
 import { SidebarToggle, useStoredOpen, useStoredPx } from "./layout";
 import TitleBar from "./chrome/TitleBar";
+import WindowResizeEdges from "./chrome/WindowResizeEdges";
 import StatusBar from "./chrome/StatusBar";
 import ProjectsSidebar from "./chrome/ProjectsSidebar";
 import SessionPane from "./session/SessionPane";
@@ -39,6 +41,7 @@ import BrowserAskModal from "./overlays/BrowserAskModal";
 import SessionModal from "./overlays/SessionModal";
 import AgentModal, { EMPTY_AGENT_FORM, type AgentForm } from "./overlays/AgentModal";
 import BrowseModal, { type BrowseState } from "./overlays/BrowseModal";
+import SettingsModal from "./overlays/SettingsModal";
 import "./App.css";
 
 /** The session-group modal's draft; `existing` means edit instead of create. */
@@ -47,6 +50,7 @@ type SessionDraft = { cwd: string; existing?: SavedSession; title: string; goal:
 export default function App() {
   // ── 1. state and hook wiring ───────────────────────────────────────────────
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem("cc-theme") as Theme) || "dark");
+  const [termFontSize, setTermFontSize] = useState(() => readTermFontSize());
   const [leftOpen, setLeftOpen] = useStoredOpen("cc-left-open", true);
   const [sidebarW, setSidebarW] = useStoredPx("cc-sidebar-w", 280, SIDEBAR_MIN, SIDEBAR_MAX);
   const [toast, setToast] = useState<string | null>(null);
@@ -60,6 +64,7 @@ export default function App() {
   const [agentForm, setAgentForm] = useState<AgentForm>(EMPTY_AGENT_FORM);
   const [sessionDraft, setSessionDraft] = useState<SessionDraft | null>(null);
   const [browse, setBrowse] = useState<BrowseState | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -88,6 +93,7 @@ export default function App() {
     switchRepo,
     persistSession: catalog.persistSession,
     persistTurns: catalog.persistTurns,
+    loadTurns: catalog.loadTurns,
   });
   liveOps.current = { rename: runtime.renameLiveAgent, move: runtime.moveLiveAgent };
 
@@ -105,7 +111,14 @@ export default function App() {
 
   const active = runtime.active;
   const chromeOccluded =
-    shelf.plusOpen || agentOpen || !!sessionDraft || !!runtime.systemUi || !!browse || treeMenuOpen || runtime.slashOpen;
+    shelf.plusOpen ||
+    agentOpen ||
+    settingsOpen ||
+    !!sessionDraft ||
+    !!runtime.systemUi ||
+    !!browse ||
+    treeMenuOpen ||
+    runtime.slashOpen;
 
   // ── 2. effects ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -113,6 +126,14 @@ export default function App() {
     document.documentElement.style.colorScheme = theme;
     localStorage.setItem("cc-theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    void api.termSetFont(termFontSize).catch(() => undefined);
+  }, [termFontSize]);
+
+  function applyTermFontSize(px: number) {
+    setTermFontSize(writeTermFontSize(px));
+  }
 
   /** First load: providers, terminal backend, catalog, and the last workspace. */
   const refresh = useCallback(async () => {
@@ -150,6 +171,10 @@ export default function App() {
         setBrowse(null);
         return;
       }
+      if (settingsOpen) {
+        setSettingsOpen(false);
+        return;
+      }
       shelf.closePlus();
       runtime.setSlashOpen(false);
       setAgentOpen(false);
@@ -158,7 +183,7 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [browse]);
+  }, [browse, settingsOpen]);
 
   // Focus trap for the two form modals.
   useEffect(() => {
@@ -434,7 +459,8 @@ export default function App() {
         } as CSSProperties
       }
     >
-      <TitleBar theme={theme} onTheme={setTheme} />
+      <TitleBar />
+      <WindowResizeEdges />
 
       {leftOpen && (
         <ProjectsSidebar
@@ -457,6 +483,7 @@ export default function App() {
           onNewChat={() => openAgentModal()}
           onPickWorkspace={() => void openBrowse("workspace", cwd || undefined)}
           onNewSession={(repoPath) => openSessionModal(repoPath)}
+          onSettings={() => setSettingsOpen(true)}
           tree={{
             onSelectGroup: (group) => void runtime.selectGroup(group),
             onSelectAgent: (group, agent) => void runtime.resumeSaved(group, agent),
@@ -516,7 +543,7 @@ export default function App() {
               onModelClick={() => runtime.openSystemPick(s, "/model")}
               onView={(view) => {
                 runtime.setView(s.id, view);
-                void catalog.persistSession({ ...s, view });
+                void catalog.persistSession({ ...s, view, resumeId: s.resumeId });
               }}
               pulseNow={runtime.pulseNow}
               slashOpen={runtime.slashOpen && s.id === active?.id}
@@ -552,6 +579,7 @@ export default function App() {
           theme={theme}
           locked={shelf.locked}
           occluded={chromeOccluded}
+          plusOpen={shelf.plusOpen}
           activeAgentId={active?.id ?? null}
           termBackend={termBackend}
           ptyRefs={runtime.ptyRefs}
@@ -574,6 +602,7 @@ export default function App() {
             onClear: shelf.clearCanvas,
           }}
           onRefreshGit={shelf.refreshGit}
+          onRestartTerminal={(tabId) => void shelf.restartTerminal(tabId)}
         />
       )}
 
@@ -668,6 +697,16 @@ export default function App() {
             void shelf.openCanvasFile(entry.path, entry.name, shelf.takePendingCanvasTab());
           }}
           onConfirmDir={() => void confirmBrowseDir()}
+        />
+      )}
+
+      {settingsOpen && (
+        <SettingsModal
+          theme={theme}
+          onTheme={setTheme}
+          termFontSize={termFontSize}
+          onTermFontSize={applyTermFontSize}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
 

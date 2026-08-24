@@ -3,6 +3,7 @@
 export default function EmptyState() {
   return (
     <div className="empty">
+      <img className="home-mark" src="/brand/logo.png" alt="CentralByte" />
       <h1>Sessão no centro</h1>
       <p>Novo chat na barra esquerda. Ferramentas no + da barra direita.</p>
       <ol>

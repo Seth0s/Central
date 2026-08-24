@@ -827,6 +827,7 @@ mod linux {
     use std::collections::HashMap;
     use std::sync::mpsc;
     use gtk::cairo::{RectangleInt, Region};
+    use gtk::glib;
     use gtk::glib::translate::ToGlibPtr;
     use gtk::prelude::*;
     use gtk::OverlaySignals;
@@ -844,7 +845,10 @@ mod linux {
         static HOLES: RefCell<HashMap<usize, NativeHole>> = RefCell::new(HashMap::new());
         static HOST: Cell<(i32, i32, i32, i32)> = Cell::new((0, 0, 1, 1));
         static POSITION_HOOK: Cell<bool> = Cell::new(false);
-        static RELAYOUT: Cell<bool> = Cell::new(false);
+        /// Coalesce move_/size_allocate onto one idle tick. Nested `size_allocate`
+        /// on VTE while GtkFixed is still inside its own allocate (every window
+        /// resize frame) corrupts glibc freelists → "corrupted double-linked list".
+        static RELAYOUT_PENDING: Cell<bool> = Cell::new(false);
     }
 
     fn widget_key(widget: &gtk::Widget) -> usize {
@@ -875,16 +879,23 @@ mod linux {
         });
         let host = fixed.clone();
         fixed.connect_size_allocate(move |_, _| {
-            if RELAYOUT.replace(true) {
-                return;
-            }
-            relayout_children(&host);
-            punch_input(&host);
-            RELAYOUT.set(false);
+            schedule_relayout(&host);
         });
         let punch = fixed.clone();
         fixed.connect_realize(move |_| {
             punch_input(&punch);
+        });
+    }
+
+    fn schedule_relayout(fixed: &gtk::Fixed) {
+        if RELAYOUT_PENDING.replace(true) {
+            return;
+        }
+        let host = fixed.clone();
+        glib::idle_add_local_once(move || {
+            RELAYOUT_PENDING.set(false);
+            relayout_children(&host);
+            punch_input(&host);
         });
     }
 
@@ -899,6 +910,8 @@ mod linux {
                 let (x, y, w, h) = overlay_rel((hole.x, hole.y, hole.w, hole.h), origin);
                 fixed.move_(&hole.widget, x, y);
                 hole.widget.set_size_request(w, h);
+                // GtkFixed ignores requisition for VTE; allocate only from idle
+                // (see schedule_relayout), never from inside size-allocate.
                 hole.widget.size_allocate(&gtk::Allocation::new(x, y, w, h));
             }
         });
@@ -920,15 +933,19 @@ mod linux {
 
     fn sync_host(fixed: &gtk::Fixed) {
         let host = overlay_host_rect(&vis_rects());
+        let prev = HOST.with(|c| c.get());
         HOST.with(|c| c.set(host));
         if let Some(parent) = fixed.parent() {
             if let Ok(overlay) = parent.downcast::<gtk::Overlay>() {
                 hook_position(&overlay, fixed);
-                overlay.queue_resize();
+                // Resizing the overlay every hole tick storms allocate+VTE and
+                // was a strong amplifier of the freelist corruption on drag-resize.
+                if prev != host {
+                    overlay.queue_resize();
+                }
             }
         }
-        relayout_children(fixed);
-        punch_input(fixed);
+        schedule_relayout(fixed);
     }
 
     pub fn place_native(

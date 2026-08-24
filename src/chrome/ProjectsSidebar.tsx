@@ -2,7 +2,7 @@
 // (folder → session-group → agents). Owns no state beyond what it is handed.
 
 import type { ComponentProps } from "react";
-import { Archive, Folder, FolderOpen, FolderPlus, MessageSquarePlus, MessagesSquare, Search } from "lucide-react";
+import { Archive, Folder, FolderOpen, FolderPlus, MessageSquarePlus, MessagesSquare, Search, Settings } from "lucide-react";
 import { UiIcon } from "../icons";
 import { SidebarPanel, SidebarToggle } from "../layout";
 import SessionTree, { type LiveAgentView } from "../SessionTree";
@@ -48,6 +48,7 @@ export default function ProjectsSidebar({
   onNewChat,
   onPickWorkspace,
   onNewSession,
+  onSettings,
   tree,
 }: {
   width: number;
@@ -66,6 +67,7 @@ export default function ProjectsSidebar({
   onNewChat: () => void;
   onPickWorkspace: () => void;
   onNewSession: (repoPath: string) => void;
+  onSettings: () => void;
   tree: SessionTreeHandlers;
 }) {
   return (
@@ -79,7 +81,7 @@ export default function ProjectsSidebar({
       className="sidebar"
       header={<SidebarToggle side="left" open onClick={onClose} />}
     >
-      <section>
+      <section className="sidebar-content">
         <button type="button" className="nav-action" onClick={onNewChat}>
           <UiIcon icon={MessageSquarePlus} size={18} />
           Novo chat
@@ -148,6 +150,12 @@ export default function ProjectsSidebar({
           );
         })}
       </section>
+      <div className="sidebar-foot">
+        <button type="button" className="nav-action" onClick={onSettings}>
+          <UiIcon icon={Settings} size={18} />
+          Configurações
+        </button>
+      </div>
     </SidebarPanel>
   );
 }

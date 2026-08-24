@@ -14,6 +14,7 @@ import type { TermBackend } from "../lib/commands";
 import { folderName } from "../lib/paths";
 import { chromeStatus } from "../lib/status-line";
 import type { SessionView, UiSession } from "../lib/ui-model";
+import Skeleton from "../ui/Skeleton";
 
 export default function SessionPane({
   session,
@@ -63,6 +64,8 @@ export default function SessionPane({
   const status = chromeStatus(session, pulseNow);
   const native = termBackend !== "xterm";
   const showTerm = session.view === "cli" && !occluded;
+  const booting =
+    session.status === "running" && !session.lastBytesAt && !(session.ptyLog && session.ptyLog.length > 0);
 
   return (
     <section className={`session-pane ${active ? "active-pane" : ""}`} onClick={onActivate}>
@@ -117,8 +120,18 @@ export default function SessionPane({
             else ptyRefs.current.delete(session.id);
           }}
         />
+        {booting && showTerm && (
+          <div className="skeleton-overlay">
+            <Skeleton.Pane label="A iniciar o agente…" />
+          </div>
+        )}
         {session.view === "chrome" && (
           <div className="chrome-overlay">
+            {booting && (
+              <div className="skeleton-overlay">
+                <Skeleton.Pane label="A iniciar o agente…" />
+              </div>
+            )}
             <ChatTranscript turns={session.turns} />
             <Composer
               sessionId={session.id}

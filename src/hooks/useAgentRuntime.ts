@@ -21,6 +21,7 @@ import {
   replaceLiveAgent,
   sessionBelongsToAgent,
   sessionContext,
+  type ChatTurn,
 } from "../lib/chat";
 import {
   classifyOutgoing,
@@ -46,7 +47,14 @@ import {
   turnHasOpenWork,
 } from "../lib/pty_translate";
 import { ptyLine, newSid } from "../lib/paths";
-import { MAX_SESSIONS, savedView, type SessionView, type SystemUi, type UiSession } from "../lib/ui-model";
+import {
+  MAX_SESSIONS,
+  messagesFromTurns,
+  savedView,
+  type SessionView,
+  type SystemUi,
+  type UiSession,
+} from "../lib/ui-model";
 import type { PtyHandle } from "../PtyTerm";
 
 export type SpawnOpts = {
@@ -74,6 +82,7 @@ export function useAgentRuntime({
   switchRepo,
   persistSession,
   persistTurns,
+  loadTurns,
 }: {
   providers: ProviderInfo[];
   cwd: string;
@@ -83,6 +92,7 @@ export function useAgentRuntime({
   switchRepo: (path: string) => Promise<string | null>;
   persistSession: (session: UiSession, title?: string, replaceAgentId?: string) => Promise<void>;
   persistTurns: (session: UiSession) => Promise<void>;
+  loadTurns: (agentId: string) => Promise<ChatTurn[]>;
 }) {
   const [sessions, setSessions] = useState<UiSession[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -231,6 +241,7 @@ export function useAgentRuntime({
     const catalogId = opts.catalogId || opts.replaceAgentId || newSid();
     const groupId = opts.groupId || `g-${crypto.randomUUID()}`;
     const group = groups.find((g) => g.id === groupId);
+    const savedTurns = replacing ? await loadTurns(catalogId) : [];
 
     // Group goal/brief become the system prompt; Claude also gets a sibling
     // roster and the browse protocol, which only reaches providers that accept a
@@ -296,8 +307,8 @@ export function useAgentRuntime({
       catalogId,
       groupId,
       resumeId: opts.resumeId ?? prev?.resumeId,
-      turns: [],
-      messages: [],
+      turns: savedTurns,
+      messages: messagesFromTurns(savedTurns),
       draft: prev?.draft ?? seed.draft,
       draftFiles: prev?.draftFiles ?? seed.draftFiles,
       ptyLog: "",
@@ -309,10 +320,39 @@ export function useAgentRuntime({
     sessionsRef.current = next;
     setSessions(next);
     setActiveId(info.id);
+
+    // Best-effort Claude resume id capture after spawn without an explicit id.
+    if (p.id === "claude" && !ui.resumeId) {
+      const spawnedAt = Date.now();
+      const liveId = info.id;
+      const catId = catalogId;
+      window.setTimeout(() => {
+        void (async () => {
+          try {
+            const rid = await api.probeVendorResume("claude", opts.cwd, spawnedAt);
+            if (!rid) return;
+            setSessions((all) => {
+              const cur = all.find((s) => s.id === liveId);
+              if (!cur || cur.resumeId) return all;
+              const patched = { ...cur, resumeId: rid };
+              void persistSession(patched);
+              const updated = all.map((s) => (s.id === liveId || s.catalogId === catId ? patched : s));
+              sessionsRef.current = updated;
+              return updated;
+            });
+          } catch {
+            /* probe is best-effort */
+          }
+        })();
+      }, 2500);
+    }
+
     return ui;
   }
 
-  /** Match a catalog row against a live pane by id, catalog id, or resume id. */
+  /** Match a catalog row against a live pane by id, catalog id, or resume id.
+   *  Search is global across groups so focusing an agent in another session of
+   *  the same cwd does not spawn a duplicate pane. */
   function findLiveAgent(
     group: SavedSession,
     agent: { id: string; name: string; provider: string; resume_id: string | null },
@@ -321,7 +361,9 @@ export function useAgentRuntime({
     return (
       inGroup.find((s) => s.id === agent.id) ??
       inGroup.find((s) => s.catalogId === agent.id) ??
-      inGroup.find((s) => Boolean(agent.resume_id) && s.resumeId === agent.resume_id)
+      inGroup.find((s) => Boolean(agent.resume_id) && s.resumeId === agent.resume_id) ??
+      sessions.find((s) => s.catalogId === agent.id || s.id === agent.id) ??
+      sessions.find((s) => Boolean(agent.resume_id) && s.resumeId === agent.resume_id)
     );
   }
 
@@ -348,9 +390,10 @@ export function useAgentRuntime({
         groupTitle: group.title,
         replaceAgentId: agent.id,
         catalogId: agent.id,
+        continueLast: !agent.resume_id && (agent.provider === "claude" || agent.provider === "codex"),
       });
-    } catch (e) {
-      showToast(String(e));
+    } catch {
+      showToast("Não foi possível reabrir o agente.");
     }
   }
 
@@ -615,6 +658,7 @@ export function useAgentRuntime({
     catalogId: s.catalogId,
     groupId: s.groupId,
     name: s.name,
+    provider: s.provider,
     status: s.status,
     nested: s.nested,
     taskLabel: currentTaskLabel(s.nested, s.messages),

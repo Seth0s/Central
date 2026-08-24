@@ -11,6 +11,7 @@ import { TOOL_ICON, UiIcon } from "../icons";
 import { SidebarPanel, SidebarToggle } from "../layout";
 import { TermView } from "../NativeTermHost";
 import BrowserPane from "../BrowserPane";
+import Skeleton from "../ui/Skeleton";
 import type { PtyHandle } from "../PtyTerm";
 import type { DirEntry, TermBackend } from "../lib/commands";
 import { TOOL_MAX, TOOL_MIN } from "../lib/ui-metrics";
@@ -53,6 +54,7 @@ export default function ToolPanel({
   theme,
   locked,
   occluded,
+  plusOpen = false,
   activeAgentId,
   termBackend,
   ptyRefs,
@@ -61,6 +63,7 @@ export default function ToolPanel({
   files,
   canvas,
   onRefreshGit,
+  onRestartTerminal,
 }: {
   width: number;
   onResize: (px: number) => void;
@@ -76,6 +79,7 @@ export default function ToolPanel({
   theme: Theme;
   locked: boolean;
   occluded: boolean;
+  plusOpen?: boolean;
   activeAgentId: string | null;
   termBackend: TermBackend | null;
   ptyRefs: MutableRefObject<Map<string, PtyHandle>>;
@@ -85,6 +89,7 @@ export default function ToolPanel({
   files: FilesToolHandlers;
   canvas: CanvasToolHandlers;
   onRefreshGit: (tabId: string) => void;
+  onRestartTerminal: (tabId: string) => void;
 }) {
   const activeTab = tabs.find((t) => t.id === activeId) ?? null;
 
@@ -139,14 +144,21 @@ export default function ToolPanel({
                 className="pty-host"
                 native={termBackend !== "xterm"}
                 visible={tab.id === activeId && !occluded}
-                interactive={tab.id === activeId && !occluded && canCommandTool(tab, activeAgentId)}
+                interactive={tab.id === activeId && !occluded && !plusOpen && canCommandTool(tab, activeAgentId)}
                 ptyRef={(h) => {
                   if (h && tab.shellId) ptyRefs.current.set(tab.shellId, h);
                   else if (tab.shellId) ptyRefs.current.delete(tab.shellId);
                 }}
               />
+            ) : tab.stopped ? (
+              <div className="pane-empty">
+                <p>Terminal parado</p>
+                <button type="button" className="ghost" onClick={() => onRestartTerminal(tab.id)}>
+                  Reiniciar
+                </button>
+              </div>
             ) : (
-              <p className="muted tool-empty">A iniciar o terminal…</p>
+              <Skeleton.Pane label="A iniciar o terminal…" />
             )}
           </div>
         ))}
@@ -188,7 +200,7 @@ export default function ToolPanel({
       {activeTab?.kind === "browser" && (
         <BrowserPane
           sessionId={activeAgentId}
-          occluded={occluded}
+          occluded={occluded || plusOpen}
           onToast={onToast}
           readOnly={locked}
           agentUrls={agentUrls}
