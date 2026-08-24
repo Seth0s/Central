@@ -18,32 +18,6 @@ const NETWORK_CAP: usize = 200;
 const SNAPSHOT_CAP: usize = 200 * 1024;
 const BOOKMARK_CAP: usize = 40;
 const BROWSER_LABEL: &str = "browser";
-const LINUX_FIXED: &str = "cc-browser-fixed";
-
-/// GtkOverlay allocates overlay children from (0,0) using requisition, which for a
-/// GtkFixed is the bottom-right of its children — covering the sidebar/header.
-/// The host window must be the bounding box of the holes, not that origin box.
-pub fn overlay_host_rect(holes: &[(i32, i32, i32, i32)]) -> (i32, i32, i32, i32) {
-    let mut iter = holes.iter().copied().filter(|&(_, _, w, h)| w >= 8 && h >= 8);
-    let Some((x, y, w, h)) = iter.next() else {
-        return (0, 0, 1, 1);
-    };
-    let mut x0 = x;
-    let mut y0 = y;
-    let mut x1 = x + w;
-    let mut y1 = y + h;
-    for (x, y, w, h) in iter {
-        x0 = x0.min(x);
-        y0 = y0.min(y);
-        x1 = x1.max(x + w);
-        y1 = y1.max(y + h);
-    }
-    (x0, y0, (x1 - x0).max(1), (y1 - y0).max(1))
-}
-
-pub fn overlay_rel(abs: (i32, i32, i32, i32), origin: (i32, i32)) -> (i32, i32, i32, i32) {
-    (abs.0 - origin.0, abs.1 - origin.1, abs.2, abs.3)
-}
 
 const INIT_SCRIPT: &str = r##"
 (function () {
@@ -832,6 +806,33 @@ mod linux {
     use gtk::prelude::*;
     use gtk::OverlaySignals;
 
+    const LINUX_FIXED: &str = "cc-browser-fixed";
+
+    /// GtkOverlay allocates overlay children from (0,0) using requisition, which for a
+    /// GtkFixed is the bottom-right of its children — covering the sidebar/header.
+    /// The host window must be the bounding box of the holes, not that origin box.
+    fn overlay_host_rect(holes: &[(i32, i32, i32, i32)]) -> (i32, i32, i32, i32) {
+        let mut iter = holes.iter().copied().filter(|&(_, _, w, h)| w >= 8 && h >= 8);
+        let Some((x, y, w, h)) = iter.next() else {
+            return (0, 0, 1, 1);
+        };
+        let mut x0 = x;
+        let mut y0 = y;
+        let mut x1 = x + w;
+        let mut y1 = y + h;
+        for (x, y, w, h) in iter {
+            x0 = x0.min(x);
+            y0 = y0.min(y);
+            x1 = x1.max(x + w);
+            y1 = y1.max(y + h);
+        }
+        (x0, y0, (x1 - x0).max(1), (y1 - y0).max(1))
+    }
+
+    fn overlay_rel(abs: (i32, i32, i32, i32), origin: (i32, i32)) -> (i32, i32, i32, i32) {
+        (abs.0 - origin.0, abs.1 - origin.1, abs.2, abs.3)
+    }
+
     struct NativeHole {
         widget: gtk::Widget,
         x: i32,
@@ -1090,30 +1091,50 @@ mod linux {
         let gtk_win = window.gtk_window().ok()?;
         find_named(gtk_win.upcast_ref())
     }
+
+    #[cfg(test)]
+    mod overlay_hole_tests {
+        use super::{overlay_host_rect, overlay_rel};
+
+        #[test]
+        fn single_hole_host_is_the_hole_not_the_origin_box() {
+            assert_eq!(
+                overlay_host_rect(&[(348, 56, 900, 700)]),
+                (348, 56, 900, 700)
+            );
+        }
+
+        #[test]
+        fn empty_or_tiny_host_is_one_pixel() {
+            assert_eq!(overlay_host_rect(&[]), (0, 0, 1, 1));
+            assert_eq!(overlay_host_rect(&[(10, 10, 1, 1)]), (0, 0, 1, 1));
+        }
+
+        #[test]
+        fn two_holes_union_and_relative_origin() {
+            let host = overlay_host_rect(&[(348, 56, 900, 400), (1260, 80, 300, 400)]);
+            assert_eq!(host, (348, 56, 1212, 424));
+            assert_eq!(
+                overlay_rel((348, 56, 900, 400), (host.0, host.1)),
+                (0, 0, 900, 400)
+            );
+            assert_eq!(
+                overlay_rel((1260, 80, 300, 400), (host.0, host.1)),
+                (912, 24, 300, 400)
+            );
+        }
+    }
 }
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 pub(crate) fn ensure_native_overlay(window: &Window<Wry>) -> Result<(), String> {
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    ))]
-    {
-        linux::ensure_overlay(window)
-    }
-    #[cfg(not(any(
-        target_os = "linux",
-        target_os = "dragonfly",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd"
-    )))]
-    {
-        let _ = window;
-        Ok(())
-    }
+    linux::ensure_overlay(window)
 }
 
 #[cfg(any(
@@ -1155,37 +1176,4 @@ pub(crate) fn linux_place_native(
 ))]
 pub(crate) fn linux_forget_native(widget: &gtk::Widget) {
     linux::forget_native(widget);
-}
-
-#[cfg(test)]
-mod overlay_hole_tests {
-    use super::{overlay_host_rect, overlay_rel};
-
-    #[test]
-    fn single_hole_host_is_the_hole_not_the_origin_box() {
-        assert_eq!(
-            overlay_host_rect(&[(348, 56, 900, 700)]),
-            (348, 56, 900, 700)
-        );
-    }
-
-    #[test]
-    fn empty_or_tiny_host_is_one_pixel() {
-        assert_eq!(overlay_host_rect(&[]), (0, 0, 1, 1));
-        assert_eq!(overlay_host_rect(&[(10, 10, 1, 1)]), (0, 0, 1, 1));
-    }
-
-    #[test]
-    fn two_holes_union_and_relative_origin() {
-        let host = overlay_host_rect(&[(348, 56, 900, 400), (1260, 80, 300, 400)]);
-        assert_eq!(host, (348, 56, 1212, 424));
-        assert_eq!(
-            overlay_rel((348, 56, 900, 400), (host.0, host.1)),
-            (0, 0, 900, 400)
-        );
-        assert_eq!(
-            overlay_rel((1260, 80, 300, 400), (host.0, host.1)),
-            (912, 24, 300, 400)
-        );
-    }
 }

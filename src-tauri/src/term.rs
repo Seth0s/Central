@@ -3,9 +3,18 @@
 
 use std::sync::OnceLock;
 
-use tauri::{AppHandle, Emitter, Manager, Window, Wry};
+use tauri::{AppHandle, Window, Wry};
 
 use centralbyte_core::session::{SessionEvent, SessionEventKind};
+
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
+use tauri::Emitter;
 
 static APP: OnceLock<AppHandle> = OnceLock::new();
 
@@ -57,11 +66,26 @@ pub struct Bounds {
     pub fg: String,
 }
 
+#[cfg(all(
+    any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ),
+    vte_get_text_format
+))]
 /// GEnum `VteFormat`: TEXT=1, HTML=2. Passing 0 logs VTE-CRITICAL and returns NULL.
-/// Used when linking against VTE ≥ 0.76 (`vte_terminal_get_text_format`).
-#[allow(dead_code)]
 pub const VTE_FORMAT_TEXT: u32 = 1;
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 /// GTK Fixed ignores requisition for some widgets; WRY uses size_allocate with this rect.
 /// A ready hole keeps its CSS size even when not raised (Chrome view / HTML popups)
 /// so the PTY does not collapse. Tiny holes stay 1×1.
@@ -82,11 +106,25 @@ pub fn layout_alloc(x: f64, y: f64, w: f64, h: f64, raised: bool) -> (i32, i32, 
     }
 }
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 /// A full-screen text extraction runs on the GTK main thread, which VTE shares
 /// with WebKitGTK — doing it per PTY flush starves both. This is the same
 /// trailing-edge debounce `src/PtyTerm.tsx` already uses on the xterm side.
 pub const SNAPSHOT_DEBOUNCE_MS: u64 = 80;
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 /// Trailing-edge debounce bookkeeping: at most one timer in flight, and no
 /// extraction when nothing was fed since the last one.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -95,6 +133,13 @@ pub struct SnapshotClock {
     armed: bool,
 }
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 impl SnapshotClock {
     /// Bytes arrived. Returns true when the caller must arm a timer.
     pub fn on_feed(&mut self) -> bool {
@@ -113,6 +158,13 @@ impl SnapshotClock {
     }
 }
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 /// Focus follows the *transition* into an interactive hole, never every bounds
 /// change: GTK gives the keyboard to whichever widget holds focus, so grabbing on
 /// each change would steal it from an HTML input on every window resize.
@@ -120,6 +172,13 @@ pub fn should_grab_focus(prev: Option<&Bounds>, next: &Bounds, raised: bool) -> 
     raised && next.interactive && prev.map_or(true, |p| !p.interactive)
 }
 
+#[cfg(any(
+    target_os = "linux",
+    target_os = "dragonfly",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 /// Same hole after rounding, same chrome flags — skip GTK work and resize.
 pub fn bounds_unchanged(prev: &Bounds, next: &Bounds) -> bool {
     layout_alloc(prev.x, prev.y, prev.w, prev.h, prev.visible)
@@ -229,19 +288,6 @@ pub fn close(session_id: &str) {
     }
 }
 
-fn emit_screen(session_id: &str, text: String) {
-    let Some(app) = APP.get() else {
-        return;
-    };
-    let _ = app.emit(
-        "session-event",
-        SessionEvent {
-            session_id: session_id.to_string(),
-            kind: SessionEventKind::Screen { text },
-        },
-    );
-}
-
 #[cfg(any(
     target_os = "linux",
     target_os = "dragonfly",
@@ -265,6 +311,20 @@ mod linux {
     use gtk::glib::translate::{from_glib_none, ToGlibPtr};
     use gtk::prelude::*;
     use pango::FontDescription;
+    use tauri::Manager;
+
+    fn emit_screen(session_id: &str, text: String) {
+        let Some(app) = APP.get() else {
+            return;
+        };
+        let _ = app.emit(
+            "session-event",
+            SessionEvent {
+                session_id: session_id.to_string(),
+                kind: SessionEventKind::Screen { text },
+            },
+        );
+    }
 
     thread_local! {
         static TERMS: RefCell<HashMap<String, Slot>> = RefCell::new(HashMap::new());
@@ -677,7 +737,7 @@ mod linux {
 
 #[cfg(test)]
 mod tests {
-    use super::{layout_alloc, resolve_backend, SnapshotClock};
+    use super::resolve_backend;
 
     #[test]
     fn backend_defaults_to_the_compiled_target() {
@@ -702,124 +762,146 @@ mod tests {
         assert_eq!(resolve_backend(Some(""), false), "xterm");
     }
 
-    #[test]
-    fn first_feed_arms_one_timer_and_later_feeds_ride_it() {
-        let mut clock = SnapshotClock::default();
-        assert!(clock.on_feed(), "first feed arms");
-        assert!(!clock.on_feed(), "second feed rides the armed timer");
-        assert!(!clock.on_feed());
-    }
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "dragonfly",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
+    mod linux {
+        use super::super::{
+            bounds_unchanged, layout_alloc, should_grab_focus, SnapshotClock, Bounds,
+        };
+        #[cfg(vte_get_text_format)]
+        use super::super::VTE_FORMAT_TEXT;
 
-    #[test]
-    fn the_timer_takes_one_snapshot_for_the_whole_burst() {
-        let mut clock = SnapshotClock::default();
-        clock.on_feed();
-        clock.on_feed();
-        assert!(clock.on_timer(), "burst is due");
-        assert!(!clock.on_timer(), "nothing fed since, so nothing to extract");
-    }
-
-    #[test]
-    fn a_feed_after_the_timer_arms_again() {
-        let mut clock = SnapshotClock::default();
-        clock.on_feed();
-        assert!(clock.on_timer());
-        assert!(clock.on_feed(), "the next burst needs its own timer");
-        assert!(clock.on_timer());
-    }
-
-    #[test]
-    fn an_idle_clock_never_extracts() {
-        let mut clock = SnapshotClock::default();
-        assert!(!clock.on_timer());
-        assert_eq!(clock, SnapshotClock::default());
-    }
-
-    #[test]
-    fn hidden_or_tiny_hole_does_not_fill_the_window() {
-        assert_eq!(layout_alloc(0.0, 0.0, 0.0, 0.0, true), (0, 0, 1, 1, false));
-        assert_eq!(layout_alloc(40.0, 56.0, 4.0, 800.0, true), (40, 56, 1, 1, false));
-    }
-
-    #[test]
-    fn ready_hole_keeps_size_when_lowered() {
-        assert_eq!(
-            layout_alloc(320.0, 56.0, 900.0, 700.0, false),
-            (320, 56, 900, 700, false)
-        );
-    }
-
-    #[test]
-    fn visible_hole_keeps_css_rect() {
-        assert_eq!(
-            layout_alloc(348.4, 56.2, 900.6, 640.8, true),
-            (348, 56, 901, 641, true)
-        );
-    }
-
-    #[test]
-    fn vte_text_format_is_the_glib_enum_value() {
-        assert_eq!(super::VTE_FORMAT_TEXT, 1);
-    }
-
-    fn sample(visible: bool) -> super::Bounds {
-        super::Bounds {
-            x: 348.4,
-            y: 56.2,
-            w: 900.6,
-            h: 640.8,
-            visible,
-            interactive: visible,
-            bg: "#1e1e1e".into(),
-            fg: "#f3f3f3".into(),
+        #[test]
+        fn first_feed_arms_one_timer_and_later_feeds_ride_it() {
+            let mut clock = SnapshotClock::default();
+            assert!(clock.on_feed(), "first feed arms");
+            assert!(!clock.on_feed(), "second feed rides the armed timer");
+            assert!(!clock.on_feed());
         }
-    }
 
-    #[test]
-    fn focus_is_taken_when_the_hole_becomes_interactive() {
-        let off = super::Bounds { interactive: false, ..sample(true) };
-        let on = sample(true);
-        assert!(super::should_grab_focus(Some(&off), &on, true));
-    }
+        #[test]
+        fn the_timer_takes_one_snapshot_for_the_whole_burst() {
+            let mut clock = SnapshotClock::default();
+            clock.on_feed();
+            clock.on_feed();
+            assert!(clock.on_timer(), "burst is due");
+            assert!(!clock.on_timer(), "nothing fed since, so nothing to extract");
+        }
 
-    #[test]
-    fn a_first_interactive_hole_takes_focus() {
-        assert!(super::should_grab_focus(None, &sample(true), true));
-    }
+        #[test]
+        fn a_feed_after_the_timer_arms_again() {
+            let mut clock = SnapshotClock::default();
+            clock.on_feed();
+            assert!(clock.on_timer());
+            assert!(clock.on_feed(), "the next burst needs its own timer");
+            assert!(clock.on_timer());
+        }
 
-    #[test]
-    fn a_resize_of_an_already_focused_hole_does_not_steal_the_keyboard() {
-        let before = sample(true);
-        let mut wider = before.clone();
-        wider.w = 1200.0;
-        assert!(!super::should_grab_focus(Some(&before), &wider, true));
-    }
+        #[test]
+        fn an_idle_clock_never_extracts() {
+            let mut clock = SnapshotClock::default();
+            assert!(!clock.on_timer());
+            assert_eq!(clock, SnapshotClock::default());
+        }
 
-    #[test]
-    fn a_lowered_or_non_interactive_hole_never_takes_focus() {
-        let hidden = super::Bounds { interactive: false, ..sample(false) };
-        assert!(!super::should_grab_focus(None, &hidden, true));
-        assert!(!super::should_grab_focus(None, &sample(true), false));
-    }
+        #[test]
+        fn hidden_or_tiny_hole_does_not_fill_the_window() {
+            assert_eq!(layout_alloc(0.0, 0.0, 0.0, 0.0, true), (0, 0, 1, 1, false));
+            assert_eq!(layout_alloc(40.0, 56.0, 4.0, 800.0, true), (40, 56, 1, 1, false));
+        }
 
-    #[test]
-    fn bounds_unchanged_ignores_subpixel_noise() {
-        let a = sample(true);
-        let mut b = a.clone();
-        b.x = 348.41;
-        b.w = 900.55;
-        assert!(super::bounds_unchanged(&a, &b));
-    }
+        #[test]
+        fn ready_hole_keeps_size_when_lowered() {
+            assert_eq!(
+                layout_alloc(320.0, 56.0, 900.0, 700.0, false),
+                (320, 56, 900, 700, false)
+            );
+        }
 
-    #[test]
-    fn bounds_unchanged_sees_visibility_and_palette() {
-        let a = sample(true);
-        let mut hidden = a.clone();
-        hidden.visible = false;
-        hidden.interactive = false;
-        assert!(!super::bounds_unchanged(&a, &hidden));
-        let mut tint = a.clone();
-        tint.bg = "#000000".into();
-        assert!(!super::bounds_unchanged(&a, &tint));
+        #[test]
+        fn visible_hole_keeps_css_rect() {
+            assert_eq!(
+                layout_alloc(348.4, 56.2, 900.6, 640.8, true),
+                (348, 56, 901, 641, true)
+            );
+        }
+
+        #[cfg(vte_get_text_format)]
+        #[test]
+        fn vte_text_format_is_the_glib_enum_value() {
+            assert_eq!(VTE_FORMAT_TEXT, 1);
+        }
+
+        fn sample(visible: bool) -> Bounds {
+            Bounds {
+                x: 348.4,
+                y: 56.2,
+                w: 900.6,
+                h: 640.8,
+                visible,
+                interactive: visible,
+                bg: "#1e1e1e".into(),
+                fg: "#f3f3f3".into(),
+            }
+        }
+
+        #[test]
+        fn focus_is_taken_when_the_hole_becomes_interactive() {
+            let off = Bounds {
+                interactive: false,
+                ..sample(true)
+            };
+            let on = sample(true);
+            assert!(should_grab_focus(Some(&off), &on, true));
+        }
+
+        #[test]
+        fn a_first_interactive_hole_takes_focus() {
+            assert!(should_grab_focus(None, &sample(true), true));
+        }
+
+        #[test]
+        fn a_resize_of_an_already_focused_hole_does_not_steal_the_keyboard() {
+            let before = sample(true);
+            let mut wider = before.clone();
+            wider.w = 1200.0;
+            assert!(!should_grab_focus(Some(&before), &wider, true));
+        }
+
+        #[test]
+        fn a_lowered_or_non_interactive_hole_never_takes_focus() {
+            let hidden = Bounds {
+                interactive: false,
+                ..sample(false)
+            };
+            assert!(!should_grab_focus(None, &hidden, true));
+            assert!(!should_grab_focus(None, &sample(true), false));
+        }
+
+        #[test]
+        fn bounds_unchanged_ignores_subpixel_noise() {
+            let a = sample(true);
+            let mut b = a.clone();
+            b.x = 348.41;
+            b.w = 900.55;
+            assert!(bounds_unchanged(&a, &b));
+        }
+
+        #[test]
+        fn bounds_unchanged_sees_visibility_and_palette() {
+            let a = sample(true);
+            let mut hidden = a.clone();
+            hidden.visible = false;
+            hidden.interactive = false;
+            assert!(!bounds_unchanged(&a, &hidden));
+            let mut tint = a.clone();
+            tint.bg = "#000000".into();
+            assert!(!bounds_unchanged(&a, &tint));
+        }
     }
 }

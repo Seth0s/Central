@@ -98,6 +98,8 @@ git push origin v0.1.0
 
 A Action cria uma **Release draft** com os artefactos. Ver [Releases](https://github.com/Seth0s/Central/releases).
 
+No GitHub, confirme **Settings → Actions → General → Workflow permissions → Read and write permissions** — sem isso o upload falha com `Resource not accessible by integration`.
+
 ## Estrutura
 
 ```
