@@ -2,7 +2,7 @@
 // Unknown fields stay null so the row omits them instead of rendering "ctx —".
 
 import { formatModelLabel, formatRateWindow, formatTokens, turnTokenCount } from "./chat";
-import { ptyIsActive, turnHasOpenWork } from "./pty_translate";
+import { turnHasOpenWork } from "./pty_translate";
 import { labelOf, type UiSession } from "./ui-model";
 
 export type ChromeStatus = {
@@ -18,10 +18,10 @@ export type ChromeStatus = {
   liveTurn: boolean;
 };
 
-export function chromeStatus(session: UiSession, pulseNow: number): ChromeStatus {
+export function chromeStatus(session: UiSession, _pulseNow: number): ChromeStatus {
   const rawModel = session.streamModel || session.model || "";
   const model = rawModel ? formatModelLabel(rawModel) : labelOf(session.provider);
-  const liveTurn = ptyIsActive(session.lastBytesAt, pulseNow) || turnHasOpenWork(session.turns);
+  const liveTurn = turnHasOpenWork(session.turns);
   const tok = turnTokenCount(session.usage);
   const tokensLabel = tok ? `${formatTokens(tok)} tok` : null;
   if (session.provider === "cursor") {

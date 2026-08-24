@@ -400,7 +400,7 @@ mod linux {
         let size = px.clamp(9, 18);
         on_main(window, move || {
             FONT_PX.with(|c| *c.borrow_mut() = size);
-            let font = FontDescription::from_string(&format!("Monospace {size}"));
+            let font = FontDescription::from_string(&format!("Monospace {size}px"));
             TERMS.with(|m| {
                 for slot in m.borrow().values() {
                     unsafe {
@@ -494,8 +494,9 @@ mod linux {
                 );
             }
             widget.set_can_focus(slot.raised && bounds.interactive);
-            // GTK propagates key events from the toplevel's focus widget, so
-            // set_can_focus alone leaves the keyboard with the webview.
+            // Keep grab_focus on the *transition* into an interactive hole only
+            // (should_grab_focus). Dropping it leaves the keyboard on the webview
+            // forever; grabbing on every bounds change steals from HTML inputs.
             let take_focus =
                 super::should_grab_focus(slot.last.as_ref(), &bounds, slot.raised);
             // Overlay child GdkWindow must be the hole, not the origin box of GtkFixed.
@@ -538,7 +539,7 @@ mod linux {
         widget.set_halign(gtk::Align::Start);
         widget.set_valign(gtk::Align::Start);
         let font_px = FONT_PX.with(|c| *c.borrow());
-        let font = FontDescription::from_string(&format!("Monospace {font_px}"));
+        let font = FontDescription::from_string(&format!("Monospace {font_px}px"));
         unsafe {
             let ptr = term_ptr(&widget);
             vte_terminal_set_font(ptr, font.to_glib_none().0);

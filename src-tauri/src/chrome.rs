@@ -857,11 +857,25 @@ mod linux {
         ptr as usize
     }
 
+    /// Bounding box of holes that keep a CSS size (mapped or not). Unmapped VTE
+    /// is `hide()` only — collapsing HOST to 1×1 was the freeze/redraw bug and
+    /// let GtkFixed requisition expand from (0,0) over the chrome.
+    fn ready_rects() -> Vec<(i32, i32, i32, i32)> {
+        HOLES.with(|m| {
+            m.borrow()
+                .values()
+                .filter(|h| h.w >= 8 && h.h >= 8)
+                .map(|h| (h.x, h.y, h.w, h.h))
+                .collect()
+        })
+    }
+
+    /// Mapped holes only — empty region while hidden so the webview gets clicks.
     fn vis_rects() -> Vec<(i32, i32, i32, i32)> {
         HOLES.with(|m| {
             m.borrow()
                 .values()
-                .filter(|h| h.mapped)
+                .filter(|h| h.mapped && h.w >= 8 && h.h >= 8)
                 .map(|h| (h.x, h.y, h.w, h.h))
                 .collect()
         })
@@ -902,10 +916,18 @@ mod linux {
 
     fn relayout_children(fixed: &gtk::Fixed) {
         let host = HOST.with(|c| c.get());
+        // Never size_allocate VTE into the 1×1 sentinel — that collapses the PTY
+        // and leaves a distorted cell grid when HOST later grows.
+        if host.2 < 8 || host.3 < 8 {
+            return;
+        }
         let origin = (host.0, host.1);
         HOLES.with(|m| {
             for hole in m.borrow().values() {
                 if hole.widget.parent().as_ref() != Some(fixed.upcast_ref()) {
+                    continue;
+                }
+                if hole.w < 8 || hole.h < 8 {
                     continue;
                 }
                 let (x, y, w, h) = overlay_rel((hole.x, hole.y, hole.w, hole.h), origin);
@@ -933,7 +955,7 @@ mod linux {
     }
 
     fn sync_host(fixed: &gtk::Fixed) {
-        let host = overlay_host_rect(&vis_rects());
+        let host = overlay_host_rect(&ready_rects());
         let prev = HOST.with(|c| c.get());
         HOST.with(|c| c.set(host));
         if let Some(parent) = fixed.parent() {
@@ -982,7 +1004,7 @@ mod linux {
                     container.remove(widget);
                 }
             }
-            let host = overlay_host_rect(&vis_rects());
+            let host = overlay_host_rect(&ready_rects());
             let (rx, ry, _, _) = overlay_rel((x, y, w, h), (host.0, host.1));
             fixed.put(widget, rx, ry);
         }
@@ -1121,6 +1143,15 @@ mod linux {
             assert_eq!(
                 overlay_rel((1260, 80, 300, 400), (host.0, host.1)),
                 (912, 24, 300, 400)
+            );
+        }
+
+        #[test]
+        fn host_keeps_css_size_even_when_the_caller_would_hide_the_widget() {
+            // mapped=false still contributes to HOST; only punch_input uses mapped.
+            assert_eq!(
+                overlay_host_rect(&[(348, 56, 900, 700)]),
+                (348, 56, 900, 700)
             );
         }
     }

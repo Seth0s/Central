@@ -32,7 +32,7 @@ Reabrir um agente na árvore spawna o TUI nesse `cwd`. Não exige `resume_id`. S
 
 Apagar agente/sessão mata o processo pelo id vivo (UUID do runtime) e tira o painel. O id do catálogo (`catalogId`) não é o id do processo.
 
-O orbe: processo vivo **e** (ecrã a mudar ou tool aberta no observer) → `run`; processo saiu com código ≠ 0 → `error`; resto idle. Sem `endedAt` de turno JSON.
+O orbe: processo vivo **e** (turno de utilizador aberto na pele, ou tool/nested a correr) → `run`; processo saiu com código ≠ 0 → `error`; resto idle. Digitar ou fazer scroll no TUI **não** conta — o snapshot do ecrã já não carimba `lastBytesAt`. Sem `endedAt` de turno JSON.
 
 ## Chrome
 
@@ -53,7 +53,7 @@ footer  footer  footer
 - **Barra aberta:** `border` de 1px contra o main. Resize na aresta interior.
 - **Fechada:** track `0`, aside não monta.
 - **Main:** até 3 `session-pane` em flex (split). `session-head` à mesma altura `--title`. Pill **CLI | Chrome**.
-- **Footer:** statusbar da janela (cwd, agente focado, modelo se conhecido). Tetris só com pulso `run`/`warn`.
+- **Footer:** statusbar da janela (cwd, agente focado, modelo se conhecido). O pulso `run`/`warn` fica no orbe da árvore, não no footer.
 - Ícones: **Lucide** (`lucide-react`). Traço 1.75. Mapa em `src/icons.tsx`.
 
 Histórico em `{app_data}/history.db` (SQLite, journal WAL). Na primeira abertura, se a DB estiver vazia e existir `{app_data}/history.json`, pastas/grupos/agentes são importados uma vez; o JSON deixa de ser escrito.
@@ -104,7 +104,7 @@ Extractor único em `src/lib/markdown.ts` (`marked` + `highlight.js` + KaTeX). C
 
 ## Tradutores PTY
 
-`src/lib/pty_translate/`: o Chrome **não** lê o fio ANSI. No Linux o VTE interpreta o ecrã e emite um snapshot (`session-event` `screen`); noutros SO o xterm faz o mesmo via `onScreen`. A pele corre um interpretador por provider e observers de chat (assistente / tools) em cima desse texto estável. O orbe `run` dispara quando o texto do ecrã muda ou há tool aberta, não quando chega um byte. `setSessions` só corre se o frame interpretado mudou. Resize do PTY só com tamanho útil (≥ 40×10) e só se `cols`/`rows` mudarem. Bytes PTY são coalescidos ~16 ms antes de alimentar o VTE e o webview.
+`src/lib/pty_translate/`: o Chrome **não** lê o fio ANSI. No Linux o VTE interpreta o ecrã e emite um snapshot (`session-event` `screen`); noutros SO o xterm faz o mesmo via `onScreen`. A pele corre um interpretador por provider e observers de chat (assistente / tools) em cima desse texto estável. O orbe `run` segue um turno aberto (envio do compositor) ou nested/tools a correr — não cada redibuxo do TUI. `setSessions` só corre se o frame interpretado mudou. Resize do PTY só com tamanho útil (≥ 40×10) e só se `cols`/`rows` mudarem. Bytes PTY são coalescidos ~16 ms antes de alimentar o VTE e o webview.
 
 Higiene do stream: OSC (hyperlinks) e `\r` (reescrever linha) no `stripAnsi`; o leitor PTY não parte UTF-8 a meio do carácter.
 

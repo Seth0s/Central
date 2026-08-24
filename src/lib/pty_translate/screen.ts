@@ -43,12 +43,13 @@ export type ScreenSession = {
   lastBytesAt?: number;
 };
 
-/** Same object if the interpreted frame did not change. Callers must keep that identity to skip React updates. */
+/** Same object if the interpreted frame did not change. Callers must keep that identity to skip React updates.
+ *  Does not stamp activity time — typing/scroll redraw the TUI without an agent turn. */
 export function mergeScreenSession<T extends ScreenSession>(
   session: T,
   snapshot: string,
   provider: string,
-  now: number,
+  _now: number,
   interpret: (provider: string, snapshot: string) => ScreenView,
 ): T {
   const meta = interpret(provider, snapshot);
@@ -68,7 +69,6 @@ export function mergeScreenSession<T extends ScreenSession>(
   return {
     ...session,
     ptyLog: meta.display,
-    lastBytesAt: displayChanged ? now : session.lastBytesAt,
     streamModel: nextModel,
     screenQuota: nextQuota,
     screenPct: nextPct,

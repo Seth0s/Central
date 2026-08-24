@@ -2,7 +2,7 @@
 
 Este é o `AGENTS.md` da raiz do repositório **`Central`** (`git@github.com:Seth0s/Central.git`). Complementa a camada de workspace em `../AGENTS.md`; não herda contratos do control plane do CentralChat nem do Idy.
 
-O código foi extraído de `CentralChat/vhosts/CentralChat_Desktop` e renomeado para CentralByte. Identificadores: `centralbyte` (npm e crate Tauri), `centralbyte_core` (domínio), `centralbyte_lib` (lib), `com.centralbyte.app` (bundle), `CentralByte` (`productName` e título de janela).
+O código foi extraído de `CentralChat/vhosts/CentralChat_Desktop` e renomeado para CentralByte. Identificadores: `centralbyte` (npm e crate Tauri), `centralbyte_core` (domínio), `centralbyte_lib` (lib), `com.centralbyte.desktop` (bundle), `CentralByte` (`productName` e título de janela).
 
 ## Identidade e escopo
 
@@ -133,5 +133,5 @@ Problemas conhecidos, em ordem de urgência:
 ## Limites de alteração
 
 - Mudar contrato de IPC (nome de comando, payload, evento) exige atualizar `src/lib/commands.ts`, `docs/architecture.md` § IPC e o registro em `src-tauri/src/lib.rs` no mesmo diff.
-- Trocar `identifier` do bundle (`com.centralbyte.app`), esquema do SQLite ou nome de crate não é mudança local: exige revisão explícita (perda de `{app_data}` / rebuild completo).
+- Trocar `identifier` do bundle (`com.centralbyte.desktop`), esquema do SQLite ou nome de crate não é mudança local: exige revisão explícita (perda de `{app_data}` / rebuild completo).
 - Decisões de ADR (PTY como sessão, webview filho único) só mudam por novo ADR em `docs/adr/`.

@@ -185,12 +185,16 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [browse, settingsOpen]);
 
-  // Focus trap for the two form modals.
+  // Focus trap for the two form modals. Depend on open/closed only — not on
+  // draft field values, or every keystroke re-runs and steals focus back to Nome.
+  const sessionModalOpen = Boolean(sessionDraft);
   useEffect(() => {
-    if (!agentOpen && !sessionDraft) return;
+    if (!agentOpen && !sessionModalOpen) return;
     const root = modalRef.current;
-    const focusable = root?.querySelectorAll<HTMLElement>("button:not([disabled]), input, textarea");
-    const start = root?.querySelector<HTMLElement>("input, textarea") ?? focusable?.[0];
+    const focusable = root?.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), input:not([readonly]), textarea",
+    );
+    const start = root?.querySelector<HTMLElement>("input:not([readonly]), textarea") ?? focusable?.[0];
     start?.focus();
     function trap(e: KeyboardEvent) {
       if (e.key !== "Tab" || !focusable?.length) return;
@@ -206,7 +210,7 @@ export default function App() {
     }
     window.addEventListener("keydown", trap);
     return () => window.removeEventListener("keydown", trap);
-  }, [agentOpen, sessionDraft]);
+  }, [agentOpen, sessionModalOpen]);
 
   // ── 3. workspace ───────────────────────────────────────────────────────────
   async function switchRepo(path: string) {

@@ -1,5 +1,17 @@
 import { test } from "vitest";
-import { applySkinObservers, interpretScreen, mergeScreenSession, observeScreen, ptyIsActive, settleTurnsIfIdle, snapshotViewport, stripAnsi, translatePty, appendPtyLog } from "./pty_translate/index.ts";
+import {
+  applySkinObservers,
+  interpretScreen,
+  mergeScreenSession,
+  observeScreen,
+  ptyIsActive,
+  settleTurnsIfIdle,
+  snapshotViewport,
+  stripAnsi,
+  translatePty,
+  appendPtyLog,
+  turnHasOpenWork,
+} from "./pty_translate/index.ts";
 
 function assert(cond: unknown, msg: string): asserts cond {
   if (!cond) throw new Error(msg);
@@ -111,9 +123,11 @@ test("observers fill the open turn and idle settles it", () => {
   const openTurn = {
     ptyLog: "A resposta do agente.",
     provider: "cursor",
+    lastBytesAt: undefined as number | undefined,
     turns: [
       {
         id: "t1",
+        origin: "user" as const,
         user: "Teste de funcionamento",
         thinking: "",
         tools: [] as { id: string; name: string; detail: string; status: "running" | "done" }[],
@@ -126,6 +140,46 @@ test("observers fill the open turn and idle settles it", () => {
   };
   const skinned = applySkinObservers(openTurn, "Tip: x", 10);
   assert(skinned.turns[0]?.assistant.includes("A resposta do agente"), "observer fills assistant");
+  assert(skinned.lastBytesAt === 10, "observer stamps activity time");
   const idle = settleTurnsIfIdle({ ...skinned, lastBytesAt: 1 }, 5000, 1500);
   assert(idle.turns[0]?.endedAt === 1, "idle settles turn");
+});
+
+test("orb ignores typing and only tracks open turns", () => {
+  const sess = { ptyLog: "> ", lastBytesAt: 5 };
+  const typed = mergeScreenSession(sess, "> hello", "fixture", 99, interpretScreen);
+  assert(typed.lastBytesAt === 5, "typing must not stamp lastBytesAt");
+  assert(turnHasOpenWork([]) === false, "no turn");
+  assert(
+    turnHasOpenWork([
+      {
+        id: "t",
+        origin: "user",
+        user: "hi",
+        thinking: "",
+        tools: [],
+        assistant: "",
+        usage: null,
+        startedAt: 1,
+        endedAt: null,
+      },
+    ]),
+    "open user turn is live",
+  );
+  assert(
+    turnHasOpenWork([
+      {
+        id: "t",
+        origin: "user",
+        user: "hi",
+        thinking: "",
+        tools: [],
+        assistant: "done",
+        usage: null,
+        startedAt: 1,
+        endedAt: 20,
+      },
+    ]) === false,
+    "settled turn is not live",
+  );
 });

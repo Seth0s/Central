@@ -1,5 +1,5 @@
-// Window footer: folder, focused agent, model, context, turn count. The tetris
-// pulse only shows while the agent is running or warned.
+// Window footer: folder, focused agent, model, context, turn count.
+// Activity pulse lives on the agent orb in the tree — not a tetris spinner here.
 
 import { contextUsed, formatModelLabel } from "../lib/chat";
 import { contentTurnCount } from "../lib/slash";
@@ -9,11 +9,11 @@ import { labelOf, type UiSession } from "../lib/ui-model";
 export default function StatusBar({
   cwd,
   active,
-  pulse,
 }: {
   cwd: string;
   active: UiSession | null;
-  pulse: string | undefined;
+  /** @deprecated Kept for call-site compat; orb owns the run/warn pulse. */
+  pulse?: string;
 }) {
   const model = active ? active.streamModel || active.model : null;
   const contextPct = active
@@ -33,13 +33,6 @@ export default function StatusBar({
           <span>{contextPct == null ? "ctx —" : `ctx ${contextPct}%`}</span>
           <span className="sep">·</span>
           <span>turno {contentTurnCount(active.turns)}</span>
-          {(pulse === "run" || pulse === "warn") && (
-            <span className="tetris" aria-hidden>
-              {Array.from({ length: 4 }, (_, i) => (
-                <i key={i} />
-              ))}
-            </span>
-          )}
         </>
       )}
     </footer>

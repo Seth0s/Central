@@ -123,7 +123,12 @@ function mergeTools(prev: ToolRun[], next: ToolRun[]): ToolRun[] {
 }
 
 /** Same object if the open user turn did not change. */
-export function applySkinObservers<T extends { turns: ChatTurn[]; ptyLog: string; provider: string }>(
+export function applySkinObservers<T extends {
+  turns: ChatTurn[];
+  ptyLog: string;
+  provider: string;
+  lastBytesAt?: number;
+}>(
   session: T,
   previousDisplay: string,
   now: number,
@@ -138,7 +143,12 @@ export function applySkinObservers<T extends { turns: ChatTurn[]; ptyLog: string
   const assistant = seen.assistant || last.assistant;
   if (assistant === last.assistant && tools === last.tools) return session;
   const nextTurn = { ...last, assistant, tools, startedAt: last.startedAt || now };
-  return { ...session, turns: [...session.turns.slice(0, -1), nextTurn] };
+  return {
+    ...session,
+    turns: [...session.turns.slice(0, -1), nextTurn],
+    // Activity clock only when the open turn actually advanced — not on TUI chrome redraws.
+    lastBytesAt: now,
+  };
 }
 
 export function settleTurnsIfIdle<T extends { turns: ChatTurn[]; lastBytesAt?: number }>(
@@ -159,7 +169,13 @@ export function settleTurnsIfIdle<T extends { turns: ChatTurn[]; lastBytesAt?: n
   };
 }
 
+/** True while a user turn is open — tools running, or waiting/streaming until settle. */
 export function turnHasOpenWork(turns: ChatTurn[]): boolean {
   const last = turns[turns.length - 1];
-  return Boolean(last && last.endedAt == null && last.tools.some((t) => t.status === "running"));
+  return Boolean(
+    last &&
+      last.endedAt == null &&
+      last.origin !== "system" &&
+      last.user,
+  );
 }

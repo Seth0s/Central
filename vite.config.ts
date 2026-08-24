@@ -4,9 +4,34 @@ import react from "@vitejs/plugin-react";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+function vendorChunk(id: string): string | undefined {
+  if (!id.includes("node_modules")) return undefined;
+  if (id.includes("mermaid")) return "mermaid";
+  if (id.includes("katex")) return "katex";
+  if (id.includes("highlight.js")) return "hljs";
+  if (id.includes("@xterm")) return "xterm";
+  if (id.includes("lucide-react")) return "icons";
+  if (id.includes("react-dom") || id.includes("/react/") || id.includes("\\react\\")) {
+    return "react";
+  }
+  return undefined;
+}
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
+
+  build: {
+    // Mermaid alone is ~3.4 MB minified and loads only via dynamic import()
+    // when a diagram is present. Warn well above that so regressions in the
+    // eager entry (index/react) still surface.
+    chunkSizeWarningLimit: 3600,
+    rollupOptions: {
+      output: {
+        manualChunks: vendorChunk,
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

@@ -42,7 +42,6 @@ import {
   mergeScreenSession,
   mergeSeenUrls,
   observeBrowseRequests,
-  ptyIsActive,
   settleTurnsIfIdle,
   turnHasOpenWork,
 } from "../lib/pty_translate";
@@ -587,7 +586,14 @@ export function useAgentRuntime({
     setSessions((all) =>
       all.map((s) => {
         if (s.id !== live.id) return s;
-        return { ...s, warned: false, draft: "", draftFiles: [], turns: [...s.turns, emptyTurn(newTurnId(), text, Date.now())] };
+        return {
+          ...s,
+          warned: false,
+          draft: "",
+          draftFiles: [],
+          turns: [...s.turns, emptyTurn(newTurnId(), text, Date.now())],
+          lastBytesAt: Date.now(),
+        };
       }),
     );
     try {
@@ -668,7 +674,7 @@ export function useAgentRuntime({
     pulse: agentPulse({
       status: s.status,
       exitCode: s.exitCode,
-      liveTurn: ptyIsActive(s.lastBytesAt, pulseNow) || turnHasOpenWork(s.turns),
+      liveTurn: turnHasOpenWork(s.turns),
       nestedRunning: s.nested.some((n) => n.status === "running"),
       pendingAsk: systemUi?.kind === "ask" && systemUi.sessionId === s.id,
       warned: Boolean(s.warned),

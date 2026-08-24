@@ -1,6 +1,9 @@
-import { useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { api } from "./lib/commands";
-import PtyTerm, { type PtyHandle } from "./PtyTerm";
+import { readPalette } from "./lib/term-palette";
+import type { PtyHandle } from "./PtyTerm";
+
+const PtyTerm = lazy(() => import("./PtyTerm"));
 
 type Props = {
   sessionId: string;
@@ -8,16 +11,6 @@ type Props = {
   visible: boolean;
   interactive: boolean;
 };
-
-function readPalette(el: HTMLElement) {
-  const cs = getComputedStyle(el);
-  const bg =
-    cs.backgroundColor && cs.backgroundColor !== "rgba(0, 0, 0, 0)"
-      ? cs.backgroundColor
-      : cs.getPropertyValue("--bg-canvas").trim() || "#1e1e1e";
-  const fg = cs.getPropertyValue("--text-bright").trim() || cs.color || "#f3f3f3";
-  return { bg, fg };
-}
 
 function holeRect(el: HTMLElement) {
   const r = el.getBoundingClientRect();
@@ -80,13 +73,15 @@ export function TermView({
     );
   }
   return (
-    <PtyTerm
-      sessionId={sessionId}
-      className={className}
-      readOnly={!interactive}
-      onScreen={onScreen}
-      ref={ptyRef}
-    />
+    <Suspense fallback={<div className={className ?? "pty-host"} />}>
+      <PtyTerm
+        sessionId={sessionId}
+        className={className}
+        readOnly={!interactive}
+        onScreen={onScreen}
+        ref={ptyRef}
+      />
+    </Suspense>
   );
 }
 
