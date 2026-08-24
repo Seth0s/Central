@@ -58,6 +58,8 @@ pub struct Bounds {
 }
 
 /// GEnum `VteFormat`: TEXT=1, HTML=2. Passing 0 logs VTE-CRITICAL and returns NULL.
+/// Used when linking against VTE ≥ 0.76 (`vte_terminal_get_text_format`).
+#[allow(dead_code)]
 pub const VTE_FORMAT_TEXT: u32 = 1;
 
 /// GTK Fixed ignores requisition for some widgets; WRY uses size_allocate with this rect.
@@ -252,7 +254,9 @@ mod linux {
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::ffi::CStr;
-    use std::os::raw::{c_char, c_int, c_long, c_uint};
+    use std::os::raw::{c_char, c_int, c_long};
+    #[cfg(vte_get_text_format)]
+    use std::os::raw::c_uint;
     use std::sync::mpsc;
     use std::time::Instant;
 
@@ -283,6 +287,7 @@ mod linux {
     }
 
     /// GEnum `VteFormat`: TEXT=1, HTML=2. Zero fails `check_enum_value` (VTE-CRITICAL).
+    #[cfg(vte_get_text_format)]
     const VTE_FORMAT_TEXT: c_uint = super::VTE_FORMAT_TEXT;
 
     extern "C" {
@@ -299,8 +304,18 @@ mod linux {
         fn vte_terminal_set_scroll_on_output(terminal: *mut VteTerminal, scroll: c_int);
         fn vte_terminal_set_mouse_autohide(terminal: *mut VteTerminal, setting: c_int);
         fn vte_terminal_set_audible_bell(terminal: *mut VteTerminal, is_audible: c_int);
-        fn vte_terminal_get_text_format(terminal: *mut VteTerminal, format: c_uint) -> *mut c_char;
         fn vte_terminal_set_cursor_blink_mode(terminal: *mut VteTerminal, mode: c_int);
+        /// VTE ≥ 0.76. Prefer this when `build.rs` sets `vte_get_text_format`.
+        #[cfg(vte_get_text_format)]
+        fn vte_terminal_get_text_format(terminal: *mut VteTerminal, format: c_uint) -> *mut c_char;
+        /// Pre-0.76 (Ubuntu 22.04). Still present (deprecated) on newer VTE.
+        #[cfg(not(vte_get_text_format))]
+        fn vte_terminal_get_text(
+            terminal: *mut VteTerminal,
+            is_selected: *const std::ffi::c_void,
+            user_data: *mut std::ffi::c_void,
+            attributes: *mut std::ffi::c_void,
+        ) -> *mut c_char;
     }
 
     fn term_ptr(widget: &gtk::Widget) -> *mut VteTerminal {
@@ -509,7 +524,22 @@ mod linux {
     }
 
     fn snapshot_text(ptr: *mut VteTerminal) -> String {
-        let raw = unsafe { vte_terminal_get_text_format(ptr, VTE_FORMAT_TEXT) };
+        // Ubuntu 22.04 (release CI) has VTE ~0.68 without get_text_format (0.76+).
+        let raw = unsafe {
+            #[cfg(vte_get_text_format)]
+            {
+                vte_terminal_get_text_format(ptr, VTE_FORMAT_TEXT)
+            }
+            #[cfg(not(vte_get_text_format))]
+            {
+                vte_terminal_get_text(
+                    ptr,
+                    std::ptr::null(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+            }
+        };
         if raw.is_null() {
             return String::new();
         }
